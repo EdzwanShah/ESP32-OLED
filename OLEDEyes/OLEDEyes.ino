@@ -32,6 +32,17 @@ volatile int BlinkFactor = 0;
 volatile bool Blinking = false;
 volatile int BlinkStep = 10;
 
+//Some Joystick Control Definitions
+#define JX_AXIS_PIN 34
+#define JY_AXIS_PIN 36
+#define MAX_AXIS_MAP 10
+#define IDLE_TEST_COUNT 100
+#define J_DEAD_ZONE 12
+int JX_OFFSET = 0;
+int JY_OFFSET = 0;
+int JX_CURRENT = 0;
+int JY_CURRENT = 0;
+
 //Timer Callback
 void MyTimerFunc() {
   if (!Blinking) {
@@ -46,9 +57,9 @@ const esp_timer_create_args_t MyTimerParams = { .callback = reinterpret_cast<esp
 void DrawEyes() {
   MyDisplay.clearDisplay();
   //Left Eye
-  MyDisplay.fillRoundRect(SCREEN_MID_X - EYE_WIDTH - 10, SCREEN_MID_Y - EYE_HEIGHT / 2 + BlinkFactor / 2, EYE_WIDTH, EYE_HEIGHT - BlinkFactor, EYE_ROUND_RADIUS, SSD1306_WHITE);
+  MyDisplay.fillRoundRect(SCREEN_MID_X - EYE_WIDTH - 10 + JX_CURRENT, SCREEN_MID_Y - EYE_HEIGHT / 2 + BlinkFactor / 2 + JY_CURRENT, EYE_WIDTH, EYE_HEIGHT - BlinkFactor, EYE_ROUND_RADIUS, SSD1306_WHITE);
   //Right Eye
-  MyDisplay.fillRoundRect(SCREEN_MID_X + 10, SCREEN_MID_Y - EYE_HEIGHT / 2 + BlinkFactor / 2, EYE_WIDTH, EYE_HEIGHT - BlinkFactor, EYE_ROUND_RADIUS, SSD1306_WHITE);
+  MyDisplay.fillRoundRect(SCREEN_MID_X + 10 + JX_CURRENT, SCREEN_MID_Y - EYE_HEIGHT / 2 + BlinkFactor / 2 + JY_CURRENT, EYE_WIDTH, EYE_HEIGHT - BlinkFactor, EYE_ROUND_RADIUS, SSD1306_WHITE);
   MyDisplay.display();
 }
 
@@ -72,10 +83,37 @@ void setup() {
   //create Timer and set it to interrupt every 3 seconds
   esp_timer_create(&MyTimerParams, &MyTimer);
   esp_timer_start_periodic(MyTimer, 3000000);
+  for(int i=0;i<IDLE_TEST_COUNT;i++){
+    JX_OFFSET += analogRead(JX_AXIS_PIN);
+    JY_OFFSET += analogRead(JY_AXIS_PIN);
+    delay(1000/IDLE_TEST_COUNT);
+  }
+  JX_OFFSET /= IDLE_TEST_COUNT;
+  JY_OFFSET /= IDLE_TEST_COUNT;
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
+   //Get the current joystick reading
+  JX_CURRENT = analogRead(JX_AXIS_PIN);
+  JY_CURRENT = analogRead(JY_AXIS_PIN);
+  if(JX_CURRENT<=JX_OFFSET-J_DEAD_ZONE){
+    JX_CURRENT = map(JX_CURRENT,0,JX_OFFSET,-MAX_AXIS_MAP,0);
+  }
+  else if(JX_CURRENT>=JX_OFFSET+J_DEAD_ZONE){
+    JX_CURRENT = map(JX_CURRENT,JX_OFFSET,4095,0,MAX_AXIS_MAP);
+  }
+  else{
+    JX_CURRENT = 0;
+  }
+  if(JY_CURRENT<=JY_OFFSET-J_DEAD_ZONE){
+    JY_CURRENT = map(JY_CURRENT,0,JY_OFFSET,-MAX_AXIS_MAP,0);
+  }
+  else if(JY_CURRENT>=JY_OFFSET+J_DEAD_ZONE){
+    JY_CURRENT = map(JY_CURRENT,JY_OFFSET,4095,0,MAX_AXIS_MAP);
+  }
+  else{
+    JY_CURRENT = 0;
+  }
   HandleBlinking();
   DrawEyes();
   delay(1);
